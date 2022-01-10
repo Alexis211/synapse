@@ -32,6 +32,8 @@ from typing import (
 
 import attr
 
+import concurrent.futures
+
 from twisted.internet.defer import Deferred
 from twisted.internet.interfaces import IConsumer
 from twisted.protocols.basic import FileSender
@@ -50,6 +52,8 @@ if TYPE_CHECKING:
     from .storage_provider import StorageProviderWrapper
 
 logger = logging.getLogger(__name__)
+
+thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=32)
 
 
 class MediaStorage:
@@ -198,7 +202,7 @@ class MediaStorage:
 
         for path in paths:
             local_path = os.path.join(self.local_media_directory, path)
-            if os.path.exists(local_path):
+            if thread_pool.submit(os.path.exists, local_path).result():
                 logger.debug("responding with local file %s", local_path)
                 return FileResponder(open(local_path, "rb"))
             logger.debug("local file %s did not exist", local_path)
@@ -225,7 +229,7 @@ class MediaStorage:
         """
         path = self._file_info_to_path(file_info)
         local_path = os.path.join(self.local_media_directory, path)
-        if os.path.exists(local_path):
+        if thread_pool.submit(os.path.exists, local_path).result():
             return local_path
 
         # Fallback for paths without method names
@@ -239,7 +243,7 @@ class MediaStorage:
                 content_type=file_info.thumbnail.type,
             )
             legacy_local_path = os.path.join(self.local_media_directory, legacy_path)
-            if os.path.exists(legacy_local_path):
+            if thread_pool.submit(os.path.exists, legacy_local_path).result():
                 return legacy_local_path
 
         dirname = os.path.dirname(local_path)
